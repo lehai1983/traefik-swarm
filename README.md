@@ -1,5 +1,4 @@
 # traefik-swarm
-traefik-swarm
 Hướng dẫn này giải thích cách sử dụng Træfik trong chế độ khả dụng cao trong Docker Swarm và với Let Encrypt.
 
 Tại sao chúng ta cần Træfik trong chế độ cụm? Chạy nhiều trường hợp nên làm việc ra khỏi hộp?
@@ -56,7 +55,7 @@ Các acme.httpChallenge.entryPointlá cờ cho phép HTTP-01thách thức và x�
 
 Đối với email của bạn và điểm vào, nó --acme.entryPointvà --acme.emailcờ.
 
-Cấu hình Docker ¶
+Cấu hình Docker 
 TL; DR:
 
 
@@ -66,3 +65,48 @@ $ traefik \
     --docker.domain=mydomain.ca \
     --docker.watch
 Để bật hỗ trợ docker và swarm-mode, bạn cần thêm --dockervà gắn --docker.swarmmodecờ. Để xem các sự kiện docker, thêm --docker.watch.
+Di chuyển cấu hình để Lãnh 
+Chúng tôi đã tạo một lệnh Træfik đặc biệt để giúp định cấu hình lưu trữ Giá trị khóa của bạn từ tệp cấu hình Træfik TOML và / hoặc cờ CLI.
+
+Triển khai một cụm Træfik 
+Cách tốt nhất chúng tôi tìm thấy là có một dịch vụ khởi tạo. Dịch vụ này sẽ đẩy cấu hình đến Lãnh sự thông qua lệnh storeconfigphụ.
+
+Dịch vụ này sẽ thử lại cho đến khi hoàn thành mà không gặp lỗi vì Consul có thể chưa sẵn sàng khi dịch vụ cố gắng đẩy cấu hình.
+
+Trình khởi tạo trong tệp soạn thảo docker sẽ là:
+
+
+  traefik_init:
+    image: traefik:1.5
+    command:
+      - "storeconfig"
+      - "--api"
+      [...]
+      - "--consul"
+      - "--consul.endpoint=consul:8500"
+      - "--consul.prefix=traefik"
+    networks:
+      - traefik
+    deploy:
+      restart_policy:
+        condition: on-failure
+    depends_on:
+      - consul
+Và bây giờ, phần Træfik sẽ chỉ có cấu hình Lãnh sự.
+
+
+  traefik:
+    image: traefik:1.5
+    depends_on:
+      - traefik_init
+      - consul
+    command:
+      - "--consul"
+      - "--consul.endpoint=consul:8500"
+      - "--consul.prefix=traefik"
+    [...]
+Ghi chú
+
+Đối với Træfik <1.5.0 thêm acme.storage=traefik/acme/accountvì Træfik không đọc nó từ Lãnh sự.
+
+Nếu bạn có một số cập nhật để làm, hãy cập nhật dịch vụ khởi tạo và triển khai lại. Cấu hình mới sẽ được lưu trữ trong Consul và bạn cần khởi động lại nút Træfik : docker service update --force traefik_traefik.
